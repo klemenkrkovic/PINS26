@@ -1,7 +1,0 @@
-*.class
-*.log
-*.iml
-*.pins26
-.idea/
-out/
-build/

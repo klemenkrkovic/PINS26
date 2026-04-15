@@ -21,6 +21,8 @@ public class SynAn implements AutoCloseable {
 		this.lexAn = new LexAn(srcFileName);
 	}
 
+    private HashMap<AST.Node, Report.Locatable> attrLoc;
+
 	@Override
 	public void close() {
 		lexAn.close();
@@ -777,7 +779,7 @@ public class SynAn implements AutoCloseable {
 				Report.warning("Unused arguments in the command line.");
 
 			try (SynAn synAn = new SynAn(cmdLineArgs[0])) {
-				synAn.parse();
+				synAn.parse(synAn.attrLoc);
 			}
 
 			// Upajmo, da kdaj pridemo to te tocke.

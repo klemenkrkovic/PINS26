@@ -1,0 +1,101 @@
+# PROGRAM
+# program can have 0 or more definitions
+program -> .
+program -> definition def_opt .
+def_opt -> definition def_opt .
+def_opt -> .
+
+# DEFINITION
+# defines functions and variables
+definition -> "FUN" "IDENTIFIER" "(" parameters ")" fun_statements_opt .
+fun_statements_opt -> "=" statements . 
+fun_statements_opt -> .
+definition -> "VAR" "IDENTIFIER" "=" initializers .
+
+# PARAMETERS
+# defines an optional parameter followed by 0 or more parameters
+parameters -> .
+parameters -> "IDENTIFIER" params_opt .
+params_opt -> "," "IDENTIFIER" params_opt .
+params_opt -> .
+
+# STATEMENTS
+# defines larger operations such as loops and assignments
+statements -> statement ";" statements_opt .
+statements_opt -> statement ";" statements_opt .
+statements_opt -> .
+
+statement -> expression expr_assign_opt .
+expr_assign_opt -> "=" expression .
+expr_assign_opt -> .
+statement -> "WHILE" expression "DO" statements "END" .
+statement -> "LET" definition def_opt "IN" statements "END" .
+statement -> "IF" expression "THEN" statements else_opt "END" .
+else_opt -> "ELSE" statements .
+else_opt -> .
+
+# EXPRESSIONS
+# more basic evaluatable operations
+expression -> disjunction_expr .
+
+disjunction_expr -> conjunction_expr disjunction_opt .
+disjunction_opt -> "||" conjunction_expr disjunction_opt .
+disjunction_opt -> .
+
+conjunction_expr -> compare_expr conjunction_opt .
+conjunction_opt -> "&&" compare_expr conjunction_opt .
+conjunction_opt -> .
+
+compare_expr -> add_expr compare_opt .
+compare_opt -> comp_operator add_expr compare_opt .
+compare_opt -> .
+comp_operator -> "==" | "!=" | "<" | ">" | "<=" | ">=" .
+
+add_expr -> mul_expr add_opt .
+add_opt -> add_operator mul_expr add_opt .
+add_opt -> .
+add_operator -> "+" | "-" .
+
+mul_expr -> prefix_expr mul_opt .
+mul_opt -> mul_operator prefix_expr mul_opt .
+mul_opt -> .
+mul_operator -> "*" | "/" | "%" .
+
+prefix_expr -> prefix_operator prefix_expr .
+prefix_expr -> postfix_expr .
+prefix_operator -> "!" | "+" | "-" | "^" .
+
+postfix_expr -> atom_expr postfix_opt .
+postfix_opt -> postfix_operator postfix_opt .
+postfix_opt -> .
+postfix_operator -> "^" .
+
+atom_expr -> "INTCONST" | "CHARCONST" | "STRCONST" .
+atom_expr -> "IDENTIFIER" expr_args_opt .
+expr_args_opt -> "(" arguments ")" .
+expr_args_opt -> .
+atom_expr -> "(" expression ")" .
+
+# ARGUMENTS
+# function call arguments
+arguments -> .
+arguments -> expression args_opt .
+args_opt -> "," expression args_opt .
+args_opt -> .
+
+# INITIALIZERS
+# variable initialization, optionally multiplied
+initializers -> .
+initializers -> initializer init_opt .
+init_opt -> "," initializer init_opt .
+init_opt -> .
+
+initializer -> "INTCONST" opt_mul .
+initializer -> constant_non_int .
+opt_mul -> "*" constant .
+opt_mul -> .
+
+# CONSTANTS
+constant -> "INTCONST" | "CHARCONST" | "STRCONST" .
+
+const_non_int -> "CHARCONST" | "STRCONST" .

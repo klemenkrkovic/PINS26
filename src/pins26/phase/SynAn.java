@@ -43,11 +43,14 @@ public class SynAn implements AutoCloseable {
 	/**
 	 * Opravi sintaksno analizo.
 	 */
-	public void parse() {
-		parseProgram();
-		if (lexAn.peekToken().symbol() != Token.Symbol.EOF)
-			Report.warning(lexAn.peekToken(), "Unexpected text '" + lexAn.peekToken().lexeme() + "...' at the end of the program.");
-	}
+    public AST.Node parse(HashMap<AST.Node, Report.Locatable> attrLoc) {
+        this.attrLoc = attrLoc;
+        final AST.Nodes<AST.MainDef> defs = parseProgram();
+        if (lexAn.peekToken().symbol() != Token.Symbol.EOF)
+            Report.warning(lexAn.peekToken(),
+                    "Unexpected text '" + lexAn.peekToken().lexeme() + "...' at the end of the program.");
+        return defs;
+    }
 
 	/**
 	 * POSTFIX_OP: PTR
@@ -60,7 +63,7 @@ public class SynAn implements AutoCloseable {
 	 * */
 	private int indent = 0;
 
-	private void parseProgram() {
+	private AST.Nodes<AST.MainDef> parseProgram() {
 		System.out.println("program ->");
 		Token t = lexAn.peekToken();
 		switch (t.symbol()) {
@@ -73,6 +76,7 @@ public class SynAn implements AutoCloseable {
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
+        return null; // TODO implement changes
 	}
 	private void defOpt() {
 		indent++;

@@ -32,6 +32,11 @@ abstract Stmt extends Node
 abstract Expr extends Node
 	Ustvari nov izraz.
 	
+abstract NameExpr extends Expr
+	Ustvari novo ime v izrazu.
+	Params:
+		name – Ime.
+	
 -----------------------------------
 
 FunDef extends MainDef
@@ -111,11 +116,6 @@ BinExpr extends Expr
 		oper – Dvomestni operator. 
 		fstExpr – Prvi (levi) podizraz. 
 		sndExpr – Drugi (desni) podizraz.
-
-NameExpr extends Expr
-	Ustvari novo ime v izrazu.
-	Params:
-		name – Ime.
 		
 VarExpr extends NameExpr
 	Ustvari nov dostop do spremenljivke ali parametra.

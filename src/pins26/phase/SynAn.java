@@ -22,6 +22,7 @@ public class SynAn implements AutoCloseable {
 	}
 
     private HashMap<AST.Node, Report.Locatable> attrLoc;
+	public boolean trace = false;
 
 	@Override
 	public void close() {
@@ -66,28 +67,32 @@ public class SynAn implements AutoCloseable {
 	private int indent = 0;
 
 	private AST.Nodes<AST.MainDef> parseProgram() {
-		System.out.println("program ->");
+		if (trace) System.out.println("program ->");
+		List<AST.MainDef> defs = new ArrayList<>();
 		Token t = lexAn.peekToken();
 		switch (t.symbol()) {
 			case FUN, VAR:
-				definition();
-				defOpt();
+				defs.add(definition());
+				defs.addAll(defOpt());
 				break;
 			case EOF:
 				break;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-        return null; // TODO implement changes
+		return new AST.Nodes<>(defs);
 	}
-	private void defOpt() {
+	private List<AST.MainDef> defOpt() {
 		indent++;
-		System.out.println(" ".repeat(indent) + "defOpt ->");
+		if (trace) System.out.println(" ".repeat(indent) + "defOpt ->");
+		List<AST.MainDef> definitions = new ArrayList<>();
 		Token t = lexAn.peekToken();
 		switch (t.symbol()) {
 			case FUN, VAR:
-				definition();
-				defOpt();
+				AST.MainDef nextDef = definition();
+				definitions.add(nextDef);
+				attrLoc.put(nextDef, t);
+				definitions.addAll(defOpt());
 				break;
 			case IN, EOF:
 				break;
@@ -95,39 +100,46 @@ public class SynAn implements AutoCloseable {
 				throw new Report.Error("Unexpected token: " + t);
 		}
 		indent--;
+		return definitions;
 	}
-	private void definition() {
+	private AST.MainDef definition() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "definition ->" + t.toString() + " " + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "definition ->" + t.toString() + " " + t.toString());
 		switch (t.symbol()) {
 			case FUN:
-				check(Token.Symbol.FUN);
-				check(Token.Symbol.IDENTIFIER);
+				Token funToken = check(Token.Symbol.FUN);
+				Token funName = check(Token.Symbol.IDENTIFIER);
 				check(Token.Symbol.LPAREN);
-				parameters();
+				List<AST.ParDef> funParams = parameters();
 				check(Token.Symbol.RPAREN);
-				fun_statements_opt();
-				break;
+				List<AST.Stmt> funBody = fun_statements_opt();
+
+				AST.FunDef funDef = new AST.FunDef(funName.lexeme(), funParams, funBody);
+				attrLoc.put(funDef, funToken);
+				return funDef;
 			case VAR:
-				check(Token.Symbol.VAR);
-				check(Token.Symbol.IDENTIFIER);
+				Token varToken = check(Token.Symbol.VAR);
+				Token varName = check(Token.Symbol.IDENTIFIER);
 				check(Token.Symbol.ASSIGN);
-				initializers();
-				break;
+				List<AST.Init> initializers = initializers();
+
+				AST.VarDef varDef = new AST.VarDef(varName.lexeme(), initializers);
+				attrLoc.put(varDef, varToken);
+				return varDef;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void fun_statements_opt() {
+	private List<AST.Stmt> fun_statements_opt() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "fun_statements_opt ->"+ t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "fun_statements_opt ->"+ t.toString());
+		List<AST.Stmt> statements = new ArrayList<>();
 		switch (t.symbol()) {
 			case ASSIGN:
 				check(Token.Symbol.ASSIGN);
-				statements();
+				statements = statements();
 				break;
 			case FUN, VAR, IN, EOF:
 				break;
@@ -135,15 +147,20 @@ public class SynAn implements AutoCloseable {
 				throw new Report.Error("Unexpected token: " + t);
 		}
 		indent--;
+		return statements;
 	}
-	private void parameters() {
+	private List<AST.ParDef> parameters() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "parameters ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "parameters ->" + t.toString());
+		List<AST.ParDef> params = new ArrayList<>();
 		switch (t.symbol()) {
 			case IDENTIFIER:
-				check(Token.Symbol.IDENTIFIER);
-				params_opt();
+				Token paramName = check(Token.Symbol.IDENTIFIER);
+				AST.ParDef param = new AST.ParDef(paramName.lexeme());
+				attrLoc.put(param, paramName);
+				params.add(param);
+				params.addAll(params_opt());
 				break;
 			case RPAREN:
 				break;
@@ -151,15 +168,21 @@ public class SynAn implements AutoCloseable {
 				throw new Report.Error("Unexpected token: " + t);
 		}
 		indent--;
+		return params;
 	}
-	private void params_opt() {
+	private List<AST.ParDef> params_opt() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "params_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "params_opt ->" + t.toString());
+		List<AST.ParDef> params = new ArrayList<>();
 		switch (t.symbol()) {
 			case COMMA:
 				check(Token.Symbol.COMMA);
-				check(Token.Symbol.IDENTIFIER);
+				Token paramName = check(Token.Symbol.IDENTIFIER);
+				AST.ParDef param = new AST.ParDef(paramName.lexeme());
+				attrLoc.put(param, paramName);
+				params.add(param);
+				params.addAll(params_opt());
 				params_opt();
 				break;
 			case RPAREN:
@@ -168,493 +191,509 @@ public class SynAn implements AutoCloseable {
 				throw new Report.Error("Unexpected token: " + t);
 		}
 		indent--;
+		return params;
 	}
-	private void statements() {
+	private List<AST.Stmt> statements() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "statements ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "statements ->" + t.toString());
+		List<AST.Stmt> stmts = new ArrayList<>();
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, WHILE, LET, IF, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				statement();
+				AST.Stmt statement = statement();
+				stmts.add(statement);
+				attrLoc.put(statement, t);
 				check(Token.Symbol.SEMIC);
-				statements_opt();
+				stmts.addAll(statements_opt());
 				break;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
 		indent--;
+		return stmts;
 	}
-	private void statements_opt() {
+	private List<AST.Stmt> statements_opt() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "statements_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "statements_opt ->" + t.toString());
+		List<AST.Stmt> stmts = new ArrayList<>();
 		switch (t.symbol()) {
 			case FUN, VAR, END, IN, ELSE, EOF:
 				break;
 			case IDENTIFIER, LPAREN, WHILE, LET, IF, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				statement();
+				AST.Stmt statement = statement();
+				stmts.add(statement);
+				attrLoc.put(statement, t);
 				check(Token.Symbol.SEMIC);
-				statements_opt();
+				stmts.addAll(statements_opt());
 				break;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
 		indent--;
+		return stmts;
 	}
-	private void statement() {
+	private AST.Stmt statement() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "statement ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "statement ->" + t.toString());
 		switch (t.symbol()) {
 			case WHILE:
-				check(Token.Symbol.WHILE);
-				expression();
+				Token whileToken = check(Token.Symbol.WHILE);
+				AST.Expr cond = expression();
 				check(Token.Symbol.DO);
-				statements();
+				List<AST.Stmt> whileBody = statements();
 				check(Token.Symbol.END);
-				break;
+				AST.WhileStmt whileStmt = new AST.WhileStmt(cond, whileBody);
+				attrLoc.put(whileStmt, whileToken);
+				indent--;
+				return whileStmt;
 			case LET:
-				check(Token.Symbol.LET);
-				definition();
-				defOpt();
+				Token letToken = check(Token.Symbol.LET);
+				List<AST.MainDef> letDefs = new ArrayList<>();
+				letDefs.add(definition());
+				letDefs.addAll(defOpt());
 				check(Token.Symbol.IN);
-				statements();
+				List<AST.Stmt> letBody = statements();
 				check(Token.Symbol.END);
-				break;
+				AST.LetStmt letStmt = new AST.LetStmt(letDefs, letBody);
+				attrLoc.put(letStmt, letToken);
+				indent--;
+				return letStmt;
 			case IF:
-				check(Token.Symbol.IF);
-				expression();
+				Token ifToken = check(Token.Symbol.IF);
+				AST.Expr ifCond = expression();
 				check(Token.Symbol.THEN);
-				statements();
-				else_opt();
+				List<AST.Stmt> thenStmts = statements();
+				List<AST.Stmt> elseStmts = else_opt();
 				check(Token.Symbol.END);
-				break;
+				AST.IfStmt ifStmt = new AST.IfStmt(ifCond, thenStmts, elseStmts);
+				attrLoc.put(ifStmt, ifToken);
+				indent--;
+				return ifStmt;
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				expression();
-				expr_assign_opt();
-				break;
+				AST.Expr expr = expression();
+				indent--;
+				return expr_assign_opt(expr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
+
 	}
-	private void expr_assign_opt() {
+	private AST.Stmt expr_assign_opt(AST.Expr expr) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "expr_assign_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "expr_assign_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case SEMIC:
-				break;
+				AST.ExprStmt exprStmt = new AST.ExprStmt(expr);
+				attrLoc.put(exprStmt, lexAn.peekToken());
+				indent--;
+				return exprStmt;
 			case ASSIGN:
-				check(Token.Symbol.ASSIGN);
-				expression();
-				break;
+				Token assignToken = check(Token.Symbol.ASSIGN);
+				AST.Expr value = expression();
+				AST.AssignStmt assignStmt = new AST.AssignStmt(expr, value);
+				attrLoc.put(assignStmt, assignToken);
+				indent--;
+				return assignStmt;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
+
 	}
-	private void else_opt() {
+	private List<AST.Stmt> else_opt() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "else_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "else_opt ->" + t.toString());
+		List<AST.Stmt> elseStmts = new ArrayList<>();
 		switch (t.symbol()) {
 			case END:
 				break;
 			case ELSE:
 				check(Token.Symbol.ELSE);
-				statements();
+				elseStmts = statements();
 				break;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
 		indent--;
+		return elseStmts;
 	}
-	private void expression() {
+	private AST.Expr expression() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "expression ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "expression ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				disjunction_expr();
-				break;
+				AST.Expr expr = disjunction_expr();
+				attrLoc.put(expr, t);
+				indent--;
+				return expr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void disjunction_expr() {
+	private AST.Expr disjunction_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "disjunction_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "disjunction_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				conjunction_expr();
-				disjunction_opt();
-				break;
+				AST.Expr left = conjunction_expr();
+				return disjunction_opt(left);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void disjunction_opt() {
+	private AST.Expr disjunction_opt(AST.Expr left) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "disjunction_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "disjunction_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN:
-				break;
+				return left;
 			case OR:
-				check(Token.Symbol.OR);
-				conjunction_expr();
-				disjunction_opt();
-				break;
+				Token orToken = check(Token.Symbol.OR);
+				AST.Expr right = conjunction_expr();
+				AST.BinExpr binExpr = new AST.BinExpr(AST.BinExpr.Oper.OR, left, right);
+				attrLoc.put(binExpr, orToken);
+				return disjunction_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void conjunction_expr() {
+	private AST.Expr conjunction_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "conjunction_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "conjunction_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				compare_expr();
-				conjunction_opt();
-				break;
+				AST.Expr left = compare_expr();
+				return conjunction_opt(left);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void conjunction_opt() {
+	private AST.Expr conjunction_opt(AST.Expr left) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "conjunction_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "conjunction_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN:
-				break;
+				return left;
 			case OR:
-				break;
+				return left;
 			case AND:
-				check(Token.Symbol.AND);
-				compare_expr();
-				conjunction_opt();
-				break;
+				Token andToken = check(Token.Symbol.AND);
+				AST.Expr right = compare_expr();
+				AST.BinExpr binExpr = new AST.BinExpr(AST.BinExpr.Oper.AND, left, right);
+				attrLoc.put(binExpr, andToken);
+				return conjunction_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void compare_expr() {
+	private AST.Expr compare_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "compare_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "compare_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				add_expr();
-				compare_opt();
-				break;
+				AST.Expr left = add_expr();
+				return compare_opt(left);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void compare_opt() {
+	private AST.Expr compare_opt(AST.Expr left) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "compare_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "compare_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN:
-				break;
+				return left;
 			case OR, AND:
-				break;
+				return left;
 			case EQU, NEQ, LTH, GTH, LEQ, GEQ:
-				comp_operator();
-				add_expr();
-				compare_opt();
-				break;
+				Token compOpToken = comp_operator();
+				AST.Expr right = add_expr();
+				AST.BinExpr binExpr = new AST.BinExpr(mapBinOper(compOpToken.symbol()), left, right);
+				attrLoc.put(binExpr, compOpToken);
+				return compare_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
 	// COMPARISON OPERATOR SET
-	private void comp_operator() {
+	private Token comp_operator() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "operator: " + t.toString());
-		switch (t.symbol()) {
-			case EQU:
-				check(Token.Symbol.EQU); break;
-			case NEQ:
-				check(Token.Symbol.NEQ); break;
-			case LTH:
-				check(Token.Symbol.LTH); break;
-			case GTH:
-				check(Token.Symbol.GTH); break;
-			case LEQ:
-				check(Token.Symbol.LEQ); break;
-			case GEQ:
-				check(Token.Symbol.GEQ); break;
-			default:
-				throw new Report.Error("Unexpected token: " + t);
-		}
-		indent--;
+		if (trace) System.out.println(" ".repeat(indent) + "operator: " + t.toString());
+        return switch (t.symbol()) {
+            case EQU -> check(Token.Symbol.EQU);
+            case NEQ -> check(Token.Symbol.NEQ);
+            case LTH -> check(Token.Symbol.LTH);
+            case GTH -> check(Token.Symbol.GTH);
+            case LEQ -> check(Token.Symbol.LEQ);
+            case GEQ -> check(Token.Symbol.GEQ);
+            default -> throw new Report.Error("Unexpected token: " + t);
+        };
 	}
 
-	private void add_expr() {
+	private AST.Expr add_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "add_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "add_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				mul_expr();
-				add_opt();
-				break;
+				AST.Expr left = mul_expr();
+				return add_opt(left);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void add_opt() {
+	private AST.Expr add_opt(AST.Expr left) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "add_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "add_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN:
-				break;
+				return left;
 			case OR, AND, EQU, NEQ, LTH, GTH, LEQ, GEQ:
-				break;
+				return left;
 			case ADD, SUB:
-				add_operator();
-				mul_expr();
-				add_opt();
-				break;
+				Token addOpToken = add_operator();
+				AST.Expr right = mul_expr();
+				AST.BinExpr binExpr = new AST.BinExpr(mapBinOper(addOpToken.symbol()), left, right);
+				attrLoc.put(binExpr, addOpToken);
+				return add_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
 	// ADDITION OPERATOR SET
-	private void add_operator() {
+	private Token add_operator() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "operator: " + t.toString());
-		switch (t.symbol()) {
-			case ADD:
-				check(Token.Symbol.ADD); break;
-			case SUB:
-				check(Token.Symbol.SUB); break;
-			default:
-				throw new Report.Error("Unexpected token: " + t);
-		}
-		indent--;
+		if (trace) System.out.println(" ".repeat(indent) + "operator: " + t.toString());
+        return switch (t.symbol()) {
+            case ADD -> check(Token.Symbol.ADD);
+            case SUB -> check(Token.Symbol.SUB);
+            default -> throw new Report.Error("Unexpected token: " + t);
+        };
 	}
 
-	private void mul_expr() {
+	private AST.Expr mul_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "mul_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "mul_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				prefix_expr();
-				mul_opt();
-				break;
+				AST.Expr left = prefix_expr();
+				return mul_opt(left);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-
-	private void mul_opt() {
+	private AST.Expr mul_opt(AST.Expr left) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "mul_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "mul_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN:
-				break;
+				return left;
 			case OR, AND, EQU, NEQ, LTH, GTH, LEQ, GEQ, ADD, SUB:
-				break;
+				return left;
 			case MUL, DIV, MOD:
-				mul_operator();
-				prefix_expr();
-				mul_opt();
-				break;
+				Token mulOpToken = mul_operator();
+				AST.Expr right = prefix_expr();
+				AST.BinExpr binExpr = new AST.BinExpr(mapBinOper(mulOpToken.symbol()), left, right);
+				attrLoc.put(binExpr, mulOpToken);
+				return mul_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
 	// MULTIPLICATION OPERATOR SET
-	private void mul_operator() {
+	private Token mul_operator() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "operator: " + t.toString());
-		switch (t.symbol()) {
-			case MUL:
-				check(Token.Symbol.MUL); break;
-			case DIV:
-				check(Token.Symbol.DIV); break;
-			case MOD:
-				check(Token.Symbol.MOD); break;
-			default:
-				throw new Report.Error("Unexpected token: " + t);
-		}
-		indent--;
+		if (trace) System.out.println(" ".repeat(indent) + "operator: " + t.toString());
+        return switch (t.symbol()) {
+            case MUL -> check(Token.Symbol.MUL);
+            case DIV -> check(Token.Symbol.DIV);
+            case MOD -> check(Token.Symbol.MOD);
+            default -> throw new Report.Error("Unexpected token: " + t);
+        };
 	}
-	private void prefix_expr() {
+
+	private AST.Expr prefix_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "prefix_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "prefix_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, INTCONST, CHARCONST, STRINGCONST:
-				postfix_expr();
-				break;
-			case ADD, SUB, NOT, PTR:
-				prefix_operator();
-				prefix_expr();
-				break;
+				return postfix_expr();
+			case ADD, SUB, NOT:
+				Token prefixOpToken = prefix_operator();
+				AST.Expr operand = prefix_expr();
+				AST.UnExpr unExpr = new AST.UnExpr(mapUnOper(prefixOpToken.symbol()), operand);
+				attrLoc.put(unExpr, prefixOpToken);
+				return unExpr;
+			case PTR:
+				Token prefixPtrToken = prefix_operator();
+				AST.Expr prefixPtrOperand = prefix_expr();
+				AST.UnExpr prefixPtrExpr = new AST.UnExpr(AST.UnExpr.Oper.MEMADDR, prefixPtrOperand);
+				attrLoc.put(prefixPtrExpr, prefixPtrToken);
+				return prefixPtrExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
 	// PREFIX OPERATOR SET
-	private void prefix_operator() {
+	private Token prefix_operator() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "operator: " + t.toString());
-		switch (t.symbol()) {
-			case ADD:
-				check(Token.Symbol.ADD); break;
-			case SUB:
-				check(Token.Symbol.SUB); break;
-			case NOT:
-				check(Token.Symbol.NOT); break;
-			case PTR:
-				check(Token.Symbol.PTR); break;
-			default:
-				throw new Report.Error("Unexpected token: " + t);
-		}
-		indent--;
+		if (trace) System.out.println(" ".repeat(indent) + "operator: " + t.toString());
+        return switch (t.symbol()) {
+            case ADD -> check(Token.Symbol.ADD);
+            case SUB -> check(Token.Symbol.SUB);
+            case NOT -> check(Token.Symbol.NOT);
+            case PTR -> check(Token.Symbol.PTR);
+            default -> throw new Report.Error("Unexpected token: " + t);
+        };
 	}
-	private void postfix_expr() {
+	private AST.Expr postfix_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "postfix_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "postfix_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, INTCONST, CHARCONST, STRINGCONST:
-				atom_expr();
-				postfix_opt();
-				break;
+				AST.Expr expr = atom_expr();
+				return postfix_opt(expr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void postfix_opt() {
+	private AST.Expr postfix_opt(AST.Expr left) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "postfix_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "postfix_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN, OR, AND,
 					EQU, NEQ, LTH, GTH, LEQ, GEQ, ADD, SUB, MUL, DIV, MOD:
-				break;
+				return left;
 			case PTR:
-				postfix_operator();
-				postfix_opt();
-				break;
+				Token ptrToken = postfix_operator();
+				AST.UnExpr unExpr = new AST.UnExpr(AST.UnExpr.Oper.VALUEAT, left);
+				attrLoc.put(unExpr, ptrToken);
+				return postfix_opt(unExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
 	// POSTFIX OPERATOR SET
-	private void postfix_operator() {
+	private Token postfix_operator() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "operator: " + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "operator: " + t.toString());
 		switch (t.symbol()) {
 			case PTR:
-				check(Token.Symbol.PTR); break;
+				return check(Token.Symbol.PTR);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void atom_expr() {
+	private AST.Expr atom_expr() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "atom_expr ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "atom_expr ->" + t.toString());
 		switch (t.symbol()) {
 			case IDENTIFIER:
-				check(Token.Symbol.IDENTIFIER);
-				expr_args_opt();
-				break;
+				Token identToken = check(Token.Symbol.IDENTIFIER);
+				AST.Expr identifierExpr = expr_args_opt(identToken);
+				attrLoc.put(identifierExpr, identToken);
+				return identifierExpr;
 			case LPAREN:
-				check(Token.Symbol.LPAREN);
-				expression();
-				check(Token.Symbol.RPAREN);
-				break;
+				Token lparenToken = check(Token.Symbol.LPAREN);
+				AST.Expr parenExpr = expression();
+				Token rparenToken = check(Token.Symbol.RPAREN);
+
+				Report.Location updatedLocation = new Report.Location(
+						lparenToken.location().begLine(),
+						lparenToken.location().begColumn(),
+						rparenToken.location().endLine(),
+						rparenToken.location().endColumn()
+				);
+				attrLoc.put(parenExpr, updatedLocation);
+				return parenExpr;
 			case INTCONST:
-				check(Token.Symbol.INTCONST);
-				break;
+				Token intToken = check(Token.Symbol.INTCONST);
+				AST.AtomExpr intExpr = new AST.AtomExpr(AST.AtomExpr.Type.INTCONST, intToken.lexeme());
+				attrLoc.put(intExpr, intToken);
+				return intExpr;
 			case CHARCONST:
-				check(Token.Symbol.CHARCONST);
-				break;
+				Token charToken = check(Token.Symbol.CHARCONST);
+				AST.AtomExpr charExpr = new AST.AtomExpr(AST.AtomExpr.Type.CHRCONST, charToken.lexeme());
+				attrLoc.put(charExpr, charToken);
+				return charExpr;
 			case STRINGCONST:
-				check(Token.Symbol.STRINGCONST);
-				break;
+				Token stringToken = check(Token.Symbol.STRINGCONST);
+				AST.AtomExpr stringExpr = new AST.AtomExpr(AST.AtomExpr.Type.STRCONST, stringToken.lexeme());
+				attrLoc.put(stringExpr, stringToken);
+				return stringExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void expr_args_opt() {
+	private AST.Expr expr_args_opt(Token identToken) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "expr_args_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "expr_args_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case LPAREN:
-				check(Token.Symbol.LPAREN);
-				arguments();
-				check(Token.Symbol.RPAREN);
-				break;
+				Token lparenToken = check(Token.Symbol.LPAREN);
+				List<AST.Expr> args = arguments();
+				Token rparenToken = check(Token.Symbol.RPAREN);
+				AST.CallExpr callExpr = new AST.CallExpr(identToken.lexeme(), args);
+				attrLoc.put(callExpr, lparenToken);
+				return callExpr;
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN, OR, AND,
 					EQU, NEQ, LTH, GTH, LEQ, GEQ, ADD, SUB, MUL, DIV, MOD, PTR:
-				break;
+				AST.VarExpr varExpr = new AST.VarExpr(identToken.lexeme());
+				attrLoc.put(varExpr, identToken);
+				return varExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void arguments() {
+	private List<AST.Expr> arguments() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "arguments ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "arguments ->" + t.toString());
+		List<AST.Expr> args = new ArrayList<>();
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
-				expression();
-				args_opt();
+				args.add(expression());
+				args_opt(args);
 				break;
 			case RPAREN:
 				break;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
+		return args;
 	}
-	private void args_opt() {
+	private void args_opt(List<AST.Expr> args) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "args_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "args_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case COMMA:
 				check(Token.Symbol.COMMA);
-				expression();
-				args_opt();
+				args.add(expression());
+				args_opt(args);
 				break;
 			case RPAREN:
 				break;
@@ -663,102 +702,185 @@ public class SynAn implements AutoCloseable {
 		}
 		indent--;
 	}
-	private void initializers() {
+	private List<AST.Init> initializers() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "initializers ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "initializers ->" + t.toString());
+		List<AST.Init> inits = new ArrayList<>();
 		switch (t.symbol()) {
 			case FUN, VAR, IN, EOF:
 				break;
 			case INTCONST, CHARCONST, STRINGCONST:
-				initializer();
-				init_opt();
+				inits.add(initializer());
+				init_opt(inits);
 				break;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
+		return inits;
 	}
-	private void init_opt() {
+	private void init_opt(List<AST.Init> inits) {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "init_opt ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "init_opt ->" + t.toString());
 		switch (t.symbol()) {
 			case FUN, VAR, IN, EOF:
 				break;
 			case COMMA:
 				check(Token.Symbol.COMMA);
-				initializer();
-				init_opt();
+				inits.add(initializer());
+				init_opt(inits);
 				break;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void initializer() {
+	private AST.Init initializer() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "initializer ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "initializer ->" + t.toString());
 		switch (t.symbol()) {
 			case INTCONST:
-				check(Token.Symbol.INTCONST);
-				opt_mul();
-				break;
+				Token intToken = check(Token.Symbol.INTCONST);
+				AST.AtomExpr optValue = opt_mul();
+				if (optValue != null) {
+					// INTCONST * constant
+					AST.AtomExpr num = new AST.AtomExpr(
+							AST.AtomExpr.Type.INTCONST,
+							intToken.lexeme()
+					);
+					attrLoc.put(num, intToken);
+
+					AST.Init init = new AST.Init(num, optValue);
+					attrLoc.put(init, intToken);
+					indent--;
+					return init;
+				} else {
+					// just INTCONST → value, num = 1
+					AST.AtomExpr value = new AST.AtomExpr(
+							AST.AtomExpr.Type.INTCONST,
+							intToken.lexeme()
+					);
+					attrLoc.put(value, intToken);
+
+					AST.AtomExpr num = new AST.AtomExpr(
+							AST.AtomExpr.Type.INTCONST,
+							"1"
+					);
+					attrLoc.put(num, intToken);
+
+					AST.Init init = new AST.Init(num, value);
+					attrLoc.put(init, intToken);
+					indent--;
+					return init;
+				}
 			case CHARCONST, STRINGCONST:
-				const_non_int();
-				break;
+				AST.AtomExpr value = const_non_int();
+
+				AST.AtomExpr num = new AST.AtomExpr(
+						AST.AtomExpr.Type.INTCONST,
+						"1"
+				);
+				attrLoc.put(num, attrLoc.get(value));
+
+				AST.Init init = new AST.Init(num, value);
+				attrLoc.put(init, attrLoc.get(value));
+				indent--;
+				return init;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
 
-	private void opt_mul() {
+	private AST.AtomExpr opt_mul() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "initializer ->" + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "initializer ->" + t.toString());
 		switch (t.symbol()) {
 			case MUL:
 				check(Token.Symbol.MUL);
-				constant();
-				break;
+				AST.AtomExpr value = constant();
+				return value;
 			case FUN, VAR, COMMA, IN, EOF:
-				break;
+				return null;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void constant() {
+	private AST.AtomExpr constant() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "constant: " + t.symbol() + " " + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "constant: " + t.symbol() + " " + t.toString());
 		switch (t.symbol()) {
 			case INTCONST:
-				check(Token.Symbol.INTCONST); break;
+				Token intToken = check(Token.Symbol.INTCONST);
+				AST.AtomExpr intExpr = new AST.AtomExpr(AST.AtomExpr.Type.INTCONST, intToken.lexeme());
+				attrLoc.put(intExpr, intToken);
+				return intExpr;
 			case CHARCONST:
-				check(Token.Symbol.CHARCONST); break;
+				Token charToken = check(Token.Symbol.CHARCONST);
+				AST.AtomExpr charExpr = new AST.AtomExpr(AST.AtomExpr.Type.CHRCONST, charToken.lexeme());
+				attrLoc.put(charExpr, charToken);
+				return charExpr;
 			case STRINGCONST:
-				check(Token.Symbol.STRINGCONST); break;
+				Token stringToken = check(Token.Symbol.STRINGCONST);
+				AST.AtomExpr stringExpr = new AST.AtomExpr(AST.AtomExpr.Type.STRCONST, stringToken.lexeme());
+				attrLoc.put(stringExpr, stringToken);
+				return stringExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
 	}
-	private void const_non_int() {
+	private AST.AtomExpr const_non_int() {
 		indent++;
 		Token t = lexAn.peekToken();
-		System.out.println(" ".repeat(indent) + "cons_not_int: " + t.symbol() + " " + t.toString());
+		if (trace) System.out.println(" ".repeat(indent) + "cons_not_int: " + t.symbol() + " " + t.toString());
 		switch (t.symbol()) {
 			case CHARCONST:
-				check(Token.Symbol.CHARCONST); break;
+				Token charToken = check(Token.Symbol.CHARCONST);
+				AST.AtomExpr charExpr = new AST.AtomExpr(AST.AtomExpr.Type.CHRCONST, charToken.lexeme());
+				attrLoc.put(charExpr, charToken);
+				return charExpr;
 			case STRINGCONST:
-				check(Token.Symbol.STRINGCONST); break;
+				Token stringToken = check(Token.Symbol.STRINGCONST);
+				AST.AtomExpr stringExpr = new AST.AtomExpr(AST.AtomExpr.Type.STRCONST, stringToken.lexeme());
+				attrLoc.put(stringExpr, stringToken);
+				return stringExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
 		}
-		indent--;
+	}
+
+	private AST.BinExpr.Oper mapBinOper(Token.Symbol sym) {
+		return switch (sym) {
+			case OR  -> AST.BinExpr.Oper.OR;
+			case AND -> AST.BinExpr.Oper.AND;
+
+			case EQU -> AST.BinExpr.Oper.EQU;
+			case NEQ -> AST.BinExpr.Oper.NEQ;
+			case LTH -> AST.BinExpr.Oper.LTH;
+			case GTH -> AST.BinExpr.Oper.GTH;
+			case LEQ -> AST.BinExpr.Oper.LEQ;
+			case GEQ -> AST.BinExpr.Oper.GEQ;
+
+			case ADD -> AST.BinExpr.Oper.ADD;
+			case SUB -> AST.BinExpr.Oper.SUB;
+
+			case MUL -> AST.BinExpr.Oper.MUL;
+			case DIV -> AST.BinExpr.Oper.DIV;
+			case MOD -> AST.BinExpr.Oper.MOD;
+
+			default -> throw new Report.Error("Not a binary operator: " + sym);
+		};
+	}
+	private AST.UnExpr.Oper mapUnOper(Token.Symbol sym) {
+		return switch (sym) {
+			case ADD  -> AST.UnExpr.Oper.ADD;
+			case SUB  -> AST.UnExpr.Oper.SUB;
+			case NOT  -> AST.UnExpr.Oper.NOT;
+
+			default -> throw new Report.Error("Not a binary operator: " + sym);
+		};
 	}
 
 
@@ -779,6 +901,7 @@ public class SynAn implements AutoCloseable {
 				Report.warning("Unused arguments in the command line.");
 
 			try (SynAn synAn = new SynAn(cmdLineArgs[0])) {
+				synAn.trace = true;
 				synAn.parse(synAn.attrLoc);
 			}
 

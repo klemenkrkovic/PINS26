@@ -1,0 +1,129 @@
+VISITORS:
+FunDef	// Definicija funkcije.
+ParDef	// Definicija parametra.
+Init	// Zacetna vrednost spremenljivke.
+
+ExprStmt	// Izraz kot samostojen stavek.
+AssignStmt	// Prireditveni stavek.
+IfStmt		// Pogojni stavek.
+WhileStmt	// Zanka.
+LetStmt		// Sestavljeni stavek.
+AtomStmt	// Atomarni izraz.
+
+UnExpr		// Enomestni izraz.
+BinExpr		// Dvomestni izraz.
+VarExpr		// Dostop do spremenljivke ali parametra.
+CallExpr	// Funkcijski klic.
+
+NODE CLASS EXTENSIONS:
+
+abstract Def
+	Ustvari novo definicijo.
+	Params:
+		name – Definirano ime
+abstract MainDef extends Def
+	Ustvari novo samostojno definicijo.
+	Params:
+		name – Definirano ime
+		
+abstract Stmt extends Node
+	Ustvari nov stavek.
+	
+abstract Expr extends Node
+	Ustvari nov izraz.
+	
+-----------------------------------
+
+FunDef extends MainDef
+	Ustvari novo definicijo funkcije.
+	Params:
+		name – Ime funkcije. 
+		pars – Parametri funkcije. 
+		stmts – Stavki telesa funkcije.
+
+ParDef extends Def
+	Ustvari novo definicijo parametra.
+	Params:
+		name – Ime parametra.
+		
+VarDef extends MainDef
+
+Ustvari novo definicijo spremenljivke.
+	Params:
+		name – Ime spremenljivke. 
+		inits – Zacetne vrednosti.
+		
+Init extends Node
+	Ustvari novo začetno vrednost spremenljivke.
+	Params:
+		num – Stevilo ponovitev. 
+		value – Vrednost
+		
+---------------------
+		
+ExprStmt extends Stmt
+	Ustvari nov stavek, ki je samo izraz.
+	Params:
+		expr – Izraz
+		
+AssignStmt extends Stmt
+	Ustvari nov pripreditveni stavek.
+	Params:
+		dstExpr – Izraz, ki doloca naslov, kamor se prireja vrednost. 
+		srcExpr – Izraz, ki doloca vrednost, ki se prireja.
+		
+IfStmt extends Stmt
+	Ustvari nov pogojni stavek.
+	Params:
+		cond – Pogoj. 
+		thenStmts – Stavki v pozitivni veji. 
+		elseStmts – Stavki v negativni veji.
+
+WhileStmt extends Stmt
+	Ustvari novo zanko.
+	Params:
+		cond – Pogoj. 
+		stmts – Stavki telesa zanke
+		
+LetStmt extends Stmt
+	Ustvari nov sestavljeni stavek.
+	Params:
+		defs – Lokalne definicije. 
+		stmts – Stavki telesa sestavljenega stavka.
+		
+---------------------
+		
+AtomExpr extends Expr
+	Ustvari nov atomarni izraz.
+	Params:
+		type – Tip atomarnega izraza. 
+		value – Vrednost.
+		
+UnExpr extends Expr
+	Ustvari nov enomestni izraz.
+	Params:
+		oper – Enomestni operator. 
+		expr – Podizraz.
+		
+BinExpr extends Expr
+	Ustvari nov dvomestni izraz.
+	Params:
+		oper – Dvomestni operator. 
+		fstExpr – Prvi (levi) podizraz. 
+		sndExpr – Drugi (desni) podizraz.
+
+NameExpr extends Expr
+	Ustvari novo ime v izrazu.
+	Params:
+		name – Ime.
+		
+VarExpr extends NameExpr
+	Ustvari nov dostop do spremenljivke ali parametra.
+	Params:
+		name – Ime spremenljivke ali parametra.
+
+CallExpr extends NameExpr
+	Ustvari nov funkcijski klic.
+	Params:
+		name – Ime funkcije. 
+		args – Argumenti klica.

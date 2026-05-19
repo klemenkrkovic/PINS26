@@ -23,8 +23,17 @@ public class SynAn implements AutoCloseable {
 
     private HashMap<AST.Node, Report.Locatable> attrLoc;
 	public boolean trace = false;
+	private Token lastToken;
+	private Report.Location loc(Token start, Token end) {
+		return new Report.Location(
+				start.location().begLine(),
+				start.location().begColumn(),
+				end.location().endLine(),
+				end.location().endColumn()
+		);
+	}
 
-	@Override
+		@Override
 	public void close() {
 		lexAn.close();
 	}
@@ -40,6 +49,8 @@ public class SynAn implements AutoCloseable {
 		final Token token = lexAn.takeToken();
 		if (token.symbol() != symbol)
 			throw new Report.Error(token, "Unexpected symbol '" + token.lexeme() + "'.");
+
+		lastToken = token;
 		return token;
 	}
 
@@ -66,6 +77,7 @@ public class SynAn implements AutoCloseable {
 	 * */
 	private int indent = 0;
 
+
 	private AST.Nodes<AST.MainDef> parseProgram() {
 		if (trace) System.out.println("program ->");
 		List<AST.MainDef> defs = new ArrayList<>();
@@ -91,7 +103,7 @@ public class SynAn implements AutoCloseable {
 			case FUN, VAR:
 				AST.MainDef nextDef = definition();
 				definitions.add(nextDef);
-				attrLoc.put(nextDef, t);
+				attrLoc.put(nextDef, loc(t, lastToken));
 				definitions.addAll(defOpt());
 				break;
 			case IN, EOF:
@@ -116,7 +128,7 @@ public class SynAn implements AutoCloseable {
 				List<AST.Stmt> funBody = fun_statements_opt();
 
 				AST.FunDef funDef = new AST.FunDef(funName.lexeme(), funParams, funBody);
-				attrLoc.put(funDef, funToken);
+				attrLoc.put(funDef, loc(funToken, lastToken));
 				return funDef;
 			case VAR:
 				Token varToken = check(Token.Symbol.VAR);
@@ -125,7 +137,7 @@ public class SynAn implements AutoCloseable {
 				List<AST.Init> initializers = initializers();
 
 				AST.VarDef varDef = new AST.VarDef(varName.lexeme(), initializers);
-				attrLoc.put(varDef, varToken);
+				attrLoc.put(varDef, loc(varToken, lastToken));
 				return varDef;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -158,7 +170,7 @@ public class SynAn implements AutoCloseable {
 			case IDENTIFIER:
 				Token paramName = check(Token.Symbol.IDENTIFIER);
 				AST.ParDef param = new AST.ParDef(paramName.lexeme());
-				attrLoc.put(param, paramName);
+				attrLoc.put(param, loc(paramName, lastToken));
 				params.add(param);
 				params.addAll(params_opt());
 				break;
@@ -180,7 +192,7 @@ public class SynAn implements AutoCloseable {
 				check(Token.Symbol.COMMA);
 				Token paramName = check(Token.Symbol.IDENTIFIER);
 				AST.ParDef param = new AST.ParDef(paramName.lexeme());
-				attrLoc.put(param, paramName);
+				attrLoc.put(param, loc(paramName, lastToken));
 				params.add(param);
 				params.addAll(params_opt());
 				params_opt();
@@ -202,7 +214,7 @@ public class SynAn implements AutoCloseable {
 			case IDENTIFIER, LPAREN, WHILE, LET, IF, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
 				AST.Stmt statement = statement();
 				stmts.add(statement);
-				attrLoc.put(statement, t);
+				attrLoc.put(statement, loc(t, lastToken));
 				check(Token.Symbol.SEMIC);
 				stmts.addAll(statements_opt());
 				break;
@@ -223,7 +235,7 @@ public class SynAn implements AutoCloseable {
 			case IDENTIFIER, LPAREN, WHILE, LET, IF, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
 				AST.Stmt statement = statement();
 				stmts.add(statement);
-				attrLoc.put(statement, t);
+				attrLoc.put(statement, loc(t, lastToken));
 				check(Token.Symbol.SEMIC);
 				stmts.addAll(statements_opt());
 				break;
@@ -245,7 +257,7 @@ public class SynAn implements AutoCloseable {
 				List<AST.Stmt> whileBody = statements();
 				check(Token.Symbol.END);
 				AST.WhileStmt whileStmt = new AST.WhileStmt(cond, whileBody);
-				attrLoc.put(whileStmt, whileToken);
+				attrLoc.put(whileStmt, loc(whileToken, lastToken));
 				indent--;
 				return whileStmt;
 			case LET:
@@ -257,7 +269,7 @@ public class SynAn implements AutoCloseable {
 				List<AST.Stmt> letBody = statements();
 				check(Token.Symbol.END);
 				AST.LetStmt letStmt = new AST.LetStmt(letDefs, letBody);
-				attrLoc.put(letStmt, letToken);
+				attrLoc.put(letStmt, loc(letToken, lastToken));
 				indent--;
 				return letStmt;
 			case IF:
@@ -268,7 +280,7 @@ public class SynAn implements AutoCloseable {
 				List<AST.Stmt> elseStmts = else_opt();
 				check(Token.Symbol.END);
 				AST.IfStmt ifStmt = new AST.IfStmt(ifCond, thenStmts, elseStmts);
-				attrLoc.put(ifStmt, ifToken);
+				attrLoc.put(ifStmt, loc(ifToken, lastToken));
 				indent--;
 				return ifStmt;
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
@@ -287,14 +299,14 @@ public class SynAn implements AutoCloseable {
 		switch (t.symbol()) {
 			case SEMIC:
 				AST.ExprStmt exprStmt = new AST.ExprStmt(expr);
-				attrLoc.put(exprStmt, lexAn.peekToken());
+				attrLoc.put(exprStmt, loc(t, lastToken));
 				indent--;
 				return exprStmt;
 			case ASSIGN:
 				Token assignToken = check(Token.Symbol.ASSIGN);
 				AST.Expr value = expression();
 				AST.AssignStmt assignStmt = new AST.AssignStmt(expr, value);
-				attrLoc.put(assignStmt, assignToken);
+				attrLoc.put(assignStmt, loc(assignToken, lastToken));
 				indent--;
 				return assignStmt;
 			default:
@@ -327,7 +339,7 @@ public class SynAn implements AutoCloseable {
 		switch (t.symbol()) {
 			case IDENTIFIER, LPAREN, ADD, SUB, NOT, PTR, INTCONST, CHARCONST, STRINGCONST:
 				AST.Expr expr = disjunction_expr();
-				attrLoc.put(expr, t);
+				attrLoc.put(expr, loc(t, lastToken));
 				indent--;
 				return expr;
 			default:
@@ -357,7 +369,7 @@ public class SynAn implements AutoCloseable {
 				Token orToken = check(Token.Symbol.OR);
 				AST.Expr right = conjunction_expr();
 				AST.BinExpr binExpr = new AST.BinExpr(AST.BinExpr.Oper.OR, left, right);
-				attrLoc.put(binExpr, orToken);
+				attrLoc.put(binExpr, loc(orToken, lastToken));
 				return disjunction_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -388,7 +400,7 @@ public class SynAn implements AutoCloseable {
 				Token andToken = check(Token.Symbol.AND);
 				AST.Expr right = compare_expr();
 				AST.BinExpr binExpr = new AST.BinExpr(AST.BinExpr.Oper.AND, left, right);
-				attrLoc.put(binExpr, andToken);
+				attrLoc.put(binExpr, loc(andToken, lastToken));
 				return conjunction_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -419,7 +431,7 @@ public class SynAn implements AutoCloseable {
 				Token compOpToken = comp_operator();
 				AST.Expr right = add_expr();
 				AST.BinExpr binExpr = new AST.BinExpr(mapBinOper(compOpToken.symbol()), left, right);
-				attrLoc.put(binExpr, compOpToken);
+				attrLoc.put(binExpr, loc(compOpToken, lastToken));
 				return compare_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -466,7 +478,7 @@ public class SynAn implements AutoCloseable {
 				Token addOpToken = add_operator();
 				AST.Expr right = mul_expr();
 				AST.BinExpr binExpr = new AST.BinExpr(mapBinOper(addOpToken.symbol()), left, right);
-				attrLoc.put(binExpr, addOpToken);
+				attrLoc.put(binExpr, loc(addOpToken, lastToken));
 				return add_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -509,7 +521,7 @@ public class SynAn implements AutoCloseable {
 				Token mulOpToken = mul_operator();
 				AST.Expr right = prefix_expr();
 				AST.BinExpr binExpr = new AST.BinExpr(mapBinOper(mulOpToken.symbol()), left, right);
-				attrLoc.put(binExpr, mulOpToken);
+				attrLoc.put(binExpr, loc(mulOpToken, lastToken));
 				return mul_opt(binExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -539,13 +551,13 @@ public class SynAn implements AutoCloseable {
 				Token prefixOpToken = prefix_operator();
 				AST.Expr operand = prefix_expr();
 				AST.UnExpr unExpr = new AST.UnExpr(mapUnOper(prefixOpToken.symbol()), operand);
-				attrLoc.put(unExpr, prefixOpToken);
+				attrLoc.put(unExpr, loc(prefixOpToken, lastToken));
 				return unExpr;
 			case PTR:
 				Token prefixPtrToken = prefix_operator();
 				AST.Expr prefixPtrOperand = prefix_expr();
 				AST.UnExpr prefixPtrExpr = new AST.UnExpr(AST.UnExpr.Oper.MEMADDR, prefixPtrOperand);
-				attrLoc.put(prefixPtrExpr, prefixPtrToken);
+				attrLoc.put(prefixPtrExpr, loc(prefixPtrToken, lastToken));
 				return prefixPtrExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -587,7 +599,7 @@ public class SynAn implements AutoCloseable {
 			case PTR:
 				Token ptrToken = postfix_operator();
 				AST.UnExpr unExpr = new AST.UnExpr(AST.UnExpr.Oper.VALUEAT, left);
-				attrLoc.put(unExpr, ptrToken);
+				attrLoc.put(unExpr, loc(ptrToken, lastToken));
 				return postfix_opt(unExpr);
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -613,35 +625,29 @@ public class SynAn implements AutoCloseable {
 			case IDENTIFIER:
 				Token identToken = check(Token.Symbol.IDENTIFIER);
 				AST.Expr identifierExpr = expr_args_opt(identToken);
-				attrLoc.put(identifierExpr, identToken);
+				attrLoc.put(identifierExpr, loc(identToken, lastToken));
 				return identifierExpr;
 			case LPAREN:
 				Token lparenToken = check(Token.Symbol.LPAREN);
 				AST.Expr parenExpr = expression();
 				Token rparenToken = check(Token.Symbol.RPAREN);
 
-				Report.Location updatedLocation = new Report.Location(
-						lparenToken.location().begLine(),
-						lparenToken.location().begColumn(),
-						rparenToken.location().endLine(),
-						rparenToken.location().endColumn()
-				);
-				attrLoc.put(parenExpr, updatedLocation);
+				attrLoc.put(parenExpr, loc(lparenToken, rparenToken));
 				return parenExpr;
 			case INTCONST:
 				Token intToken = check(Token.Symbol.INTCONST);
 				AST.AtomExpr intExpr = new AST.AtomExpr(AST.AtomExpr.Type.INTCONST, intToken.lexeme());
-				attrLoc.put(intExpr, intToken);
+				attrLoc.put(intExpr, loc(intToken, lastToken));
 				return intExpr;
 			case CHARCONST:
 				Token charToken = check(Token.Symbol.CHARCONST);
 				AST.AtomExpr charExpr = new AST.AtomExpr(AST.AtomExpr.Type.CHRCONST, charToken.lexeme());
-				attrLoc.put(charExpr, charToken);
+				attrLoc.put(charExpr, loc(charToken, lastToken));
 				return charExpr;
 			case STRINGCONST:
 				Token stringToken = check(Token.Symbol.STRINGCONST);
 				AST.AtomExpr stringExpr = new AST.AtomExpr(AST.AtomExpr.Type.STRCONST, stringToken.lexeme());
-				attrLoc.put(stringExpr, stringToken);
+				attrLoc.put(stringExpr, loc(stringToken, lastToken));
 				return stringExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);
@@ -657,12 +663,12 @@ public class SynAn implements AutoCloseable {
 				List<AST.Expr> args = arguments();
 				Token rparenToken = check(Token.Symbol.RPAREN);
 				AST.CallExpr callExpr = new AST.CallExpr(identToken.lexeme(), args);
-				attrLoc.put(callExpr, lparenToken);
+				attrLoc.put(callExpr, loc(lparenToken, rparenToken));
 				return callExpr;
 			case RPAREN, ASSIGN, COMMA, SEMIC, DO, THEN, OR, AND,
 					EQU, NEQ, LTH, GTH, LEQ, GEQ, ADD, SUB, MUL, DIV, MOD, PTR:
 				AST.VarExpr varExpr = new AST.VarExpr(identToken.lexeme());
-				attrLoc.put(varExpr, identToken);
+				attrLoc.put(varExpr, loc(t, lastToken));
 				return varExpr;
 			default:
 				throw new Report.Error("Unexpected token: " + t);

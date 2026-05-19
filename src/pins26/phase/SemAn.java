@@ -517,7 +517,26 @@ public class SemAn {
 		private class ResolverVisitor implements AST.FullVisitor<Object, Object> {
 
 		    // TODO
+			@Override
+			public Object visit(final AST.Nodes<? extends AST.Node> nodes, final Object arg) {
 
+				for (final AST.Node node : nodes) {
+					switch (node) {
+						case final AST.VarExpr varExpr:
+							varExpr.accept(this, null);
+							break;
+						case final AST.AssignStmt assignStmt:
+							assignStmt.accept(this, null);
+							break;
+						default:
+							if (node instanceof AST.Expr expr)
+								attrAST.attrLVal.put(expr, false);
+							node.accept(this, null);
+							break;
+					}
+				}
+				return null;
+			}
 
 			@Override
 			public Object visit(final AST.AssignStmt assignStmt, final Object arg) {
@@ -552,29 +571,7 @@ public class SemAn {
 				return null;
 			}
 
-			// stuff to avoid null value in if
-			@Override
-			public Object visit(final AST.BinExpr binExpr, final Object arg) {
-				binExpr.fstExpr.accept(this, arg);
-				binExpr.sndExpr.accept(this, arg);
 
-				attrAST.attrLVal.put(binExpr, false);
-				return null;
-			}
-			@Override
-			public Object visit(final AST.AtomExpr atomExpr, final Object arg) {
-				attrAST.attrLVal.put(atomExpr, false);
-				return null;
-			}
-			@Override
-			public Object visit(final AST.CallExpr callExpr, final Object arg) {
-				for (AST.Expr e : callExpr.args) {
-					e.accept(this, arg);
-				}
-
-				attrAST.attrLVal.put(callExpr, false);
-				return null;
-			}
 		}
 
 	}

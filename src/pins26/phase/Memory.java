@@ -216,7 +216,7 @@ public class Memory {
 				// global variables (depth 0) absolute access
 				if (currentDepth == 0) {
 					Mem.AbsAccess absAccess = new Mem.AbsAccess(
-							"g_" + varDef.name,
+							"_" + varDef.name,
 							size,
 							decodeInits(varDef)
 					);

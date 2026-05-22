@@ -529,14 +529,15 @@ public class SemAn {
 							assignStmt.accept(this, null);
 							break;
 						default:
-							if (node instanceof AST.Expr expr)
-								attrAST.attrLVal.put(expr, false);
+							if (node instanceof AST.Expr)
+								attrAST.attrLVal.put((AST.Expr) node, false);
 							node.accept(this, null);
 							break;
 					}
 				}
 				return null;
 			}
+
 
 			@Override
 			public Object visit(final AST.AssignStmt assignStmt, final Object arg) {
@@ -570,7 +571,29 @@ public class SemAn {
 
 				return null;
 			}
+			// needed
+			@Override
+			public Object visit(AST.ExprStmt stmt, Object arg) {
+				stmt.expr.accept(this, null);
+				return null;
+			}
+			@Override
+			public Object visit(AST.BinExpr expr, Object arg) {
 
+				attrAST.attrLVal.put(expr, false);
+
+				expr.fstExpr.accept(this, null);
+				expr.sndExpr.accept(this, null);
+
+				return null;
+			}
+			@Override
+			public Object visit(AST.AtomExpr expr, Object arg) {
+
+				attrAST.attrLVal.put(expr, false);
+
+				return null;
+			}
 
 		}
 
